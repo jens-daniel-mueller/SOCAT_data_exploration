@@ -86,11 +86,14 @@ ts <- ts %>%
 
 # Plot monthly Baltic Sea data --------------------------------------------
 
+library(scico)
+
 ts %>%
   filter(!is.na(value)) %>% 
   ggplot(aes(date, lat, fill=value))+
   geom_raster()+
   scale_fill_viridis_c()+
+  #scale_fill_scico(palette = "berlin")+
   labs(x="", y="pCO2 / fCO2", title = "Comparison of Finnmaid data sets",
        subtitle = "Monthly gridded data from SOCAT")+
   coord_cartesian(expand = 0)+
