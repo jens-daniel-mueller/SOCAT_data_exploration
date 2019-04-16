@@ -5,7 +5,6 @@ library(ncdf4)
 
 
 # Open and inspect decadel gridded data file ------------------------------
-
 nc <- nc_open(here::here("Data/Gridded", "SOCATv6_tracks_gridded_monthly.nc"))
 print(nc)
 
@@ -74,29 +73,30 @@ rm(slice, slice_long, temp, date)
 
 }
 
-profiles <- profiles %>%
-  mutate(var = var)
 
-if (exists("profiles_all", inherits = FALSE)){
-  profiles_all <- bind_rows(profiles_all, profiles)
-} else{profiles_all <- profiles}
+ts <- ts %>%
+  filter(lubridate::year(date) >= 2003) 
 
-rm(profiles, array)
-}
-
+ts <- ts %>%
+  select(lat, date, value) %>% 
+  group_by(lat,date) %>% 
+  summarise_all("mean", na.rm=TRUE) %>% 
+  ungroup()
 
 
 # Plot monthly Baltic Sea data --------------------------------------------
 
 ts %>%
-  filter(lubridate::year(date) >= 2003) %>% 
-  ggplot(aes(date, value, col=as.factor(lat)))+
-  geom_point()+
-  scale_color_viridis_d(name="Lat")+
+  filter(!is.na(value)) %>% 
+  ggplot(aes(date, lat, fill=value))+
+  geom_raster()+
+  scale_fill_viridis_c()+
   labs(x="", y="pCO2 / fCO2", title = "Comparison of Finnmaid data sets",
        subtitle = "Monthly gridded data from SOCAT")+
+  coord_cartesian(expand = 0)+
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y")+
   theme_bw()
   
 ggsave(here::here("/Plots", "SOCATv6_monthly_gridded_Baltic.jpg"),
-       width = 15, height = 5)
+       width = 15, height = 3)
 

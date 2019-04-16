@@ -25,22 +25,44 @@ f <- function(x, pos) subset(x, SOCAT_DOI  %in% Finnmaid_DOI)
 df_DOI <- read_tsv_chunked(here::here("/Data", "SOCATv6.tsv"), skip = 5399,
                        DataFrameCallback$new(f), chunk_size = 100000)
 
+rm(f, meta, Finnmaid_DOI)
+
+
+# Finnmaid Flag E DOI subset -----------------------------------------------------
+
+meta <- read_delim("Data/SOCATv6_FlagE.tsv", 
+                   "\t", escape_double = FALSE, trim_ws = TRUE, 
+                   skip = 4, n_max = 107)
+
+unique( meta$`Platform Name` )
+
+meta <- meta %>% 
+  filter(`Platform Name` %in% c("Finnmaid", "VOS Finnpartner"))
+
+Finnmaid_DOI <- meta$`SOCAT DOI`
+
+
+f <- function(x, pos) subset(x, SOCAT_DOI  %in% Finnmaid_DOI)
+df_DOI_E <- read_tsv_chunked(here::here("/Data", "SOCATv6_FlagE.tsv"),
+                             skip = 154,
+                       DataFrameCallback$new(f), chunk_size = 100000)
+
 rm(f)
 
 # f <- function(x, pos) subset(x, gear == 3)
 # read_csv_chunked(readr_example("mtcars.csv"), DataFrameCallback$new(f), chunk_size = 5)
 
 
-# Central Baltic Sea subset -----------------------------------------------
-
-f_coord <- function(x, pos) subset(x, `longitude [dec.deg.E]` > 11 & `longitude [dec.deg.E]` < 30 &
-                               `latitude [dec.deg.N]` > 54 & `latitude [dec.deg.N]` < 61)
-
-df_coord <- read_tsv_chunked(here::here("/Data", "SOCATv6.tsv"), skip = 5399,
-                       DataFrameCallback$new(f_coord), chunk_size = 100000)
-
-df_coord <- df_coord %>% 
-  filter(yr >= 2003)
+# # Central Baltic Sea subset -----------------------------------------------
+# 
+# f_coord <- function(x, pos) subset(x, `longitude [dec.deg.E]` > 11 & `longitude [dec.deg.E]` < 30 &
+#                                `latitude [dec.deg.N]` > 54 & `latitude [dec.deg.N]` < 61)
+# 
+# df_coord <- read_tsv_chunked(here::here("/Data", "SOCATv6.tsv"), skip = 5399,
+#                        DataFrameCallback$new(f_coord), chunk_size = 100000)
+# 
+# df_coord <- df_coord %>% 
+#   filter(yr >= 2003)
 
 
 # SOCATv6 <- read_delim("Data/SOCATv6.tsv", 
@@ -75,9 +97,13 @@ FM_local <- FM_local %>%
 # Merge Central Baltic Sea and DOI data set -------------------------------
 
 df_DOI$subset <- "SOCAT: Finnmaid/Finnpartner DOI"
-df_coord$subset <- "SOCAT: Central Baltic coordinates"
+df_DOI_E$subset <- "SOCAT: Finnmaid/Finnpartner DOI"
+#df_coord$subset <- "SOCAT: Central Baltic coordinates"
 
-df <- bind_rows(df_DOI, df_coord)
+df_DOI_E <- df_DOI_E %>% 
+  mutate(Expocode = as.character(Expocode))
+
+df <- bind_rows(df_DOI, df_DOI_E)
 
 df <- df %>% 
   rename("lon" = "longitude [dec.deg.E]",
@@ -98,17 +124,17 @@ df <- bind_rows(df, FM_local)
 
 df %>% 
   filter(lat > 59, lat < 59.05) %>% 
-  ggplot(aes(date_time, fCO2, col=SST))+
+  ggplot(aes(date_time, fCO2, col=subset))+
   geom_point()+
-  scale_color_viridis_c()+
-  facet_wrap(~subset, ncol = 1)+
+  scale_color_brewer(palette = "Set1", name="")+
   labs(x="", y="pCO2 / fCO2", title = "Comparison of Finnmaid data sets",
       subtitle = "Own data and two subsets from SOCATv6.tsv | Lat range: 59-59.05N")+
-  theme_bw()
+  theme_bw()+
+  theme(legend.position = "bottom")
 
 
-ggsave(here::here("/Plots", "SOCATv6_Central_Baltic_vs_Finnmaid.jpg"),
-       width = 15, height = 8)
+ggsave(here::here("/Plots", "SOCATv6_incl_E.jpg"),
+       width = 15, height = 4)
 
 
 
@@ -117,8 +143,8 @@ ggsave(here::here("/Plots", "SOCATv6_Central_Baltic_vs_Finnmaid.jpg"),
 # df %>% 
 # write_csv(here::here("/Data", "SOCATv6_Finnmaid.csv"))
 
-meta %>%
-write_csv(here::here("/Data", "SOCATv6_Finnmaid_meta.csv"))
+# meta %>%
+# write_csv(here::here("/Data", "SOCATv6_Finnmaid_meta.csv"))
 
 
 
