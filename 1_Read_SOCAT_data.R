@@ -117,6 +117,9 @@ ggsave(here::here("/Plots", "SOCATv6_Central_Baltic_vs_Finnmaid.jpg"),
 # df %>% 
 # write_csv(here::here("/Data", "SOCATv6_Finnmaid.csv"))
 
+meta %>%
+write_csv(here::here("/Data", "SOCATv6_Finnmaid_meta.csv"))
+
 
 
 
