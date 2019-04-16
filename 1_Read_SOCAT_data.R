@@ -87,38 +87,39 @@ df <- df %>%
 
 #i <- unique(df$dist_Trave)[1]
 
-for (i in unique(df$dist_Trave)) {
+for (param in c("SST","sal", "fCO2")) {
+  for (i in na.omit(unique(df$dist_Trave))) {
 
   df %>% 
     filter(dist_Trave == i) %>% 
-    ggplot(aes(date_time, SST, col=dataset))+
+    ggplot(aes_string("date_time", param, col="dataset"))+
     geom_point(size = 0.5)+
     scale_color_brewer(palette = "Set1", name="")+
-    labs(x="", y="SST / deg C", title = "Comparison of Finnmaid data sets",
+    labs(x="", title = "Comparison of Finnmaid data sets",
          subtitle = paste("Distance from Travemünde (+/- 10km):",i,"km"))+
     theme_bw()+
     scale_x_datetime(date_breaks = "1 year", date_labels = "%Y")+
     theme(legend.position = "bottom")
   
-  ggsave(here::here("/Plots/local_vs_SOCAT", paste("SST_SOCATv6_vs_local_",i,"km.jpg", sep="")),
+  ggsave(here::here("/Plots/local_vs_SOCAT", paste(param,"_SOCATv6_vs_local_",i,"km.jpg", sep="")),
          width = 15, height = 4, dpi = 300)
  
   df %>% 
     filter(dist_Trave == i) %>% 
-    ggplot(aes(date_time, SST))+
+    ggplot(aes_string("date_time", as.name(param)))+
     geom_point(size = 0.5)+
-    labs(x="", y="SST / deg C", title = "Comparison of Finnmaid data sets",
+    labs(x="", title = "Comparison of Finnmaid data sets",
          subtitle = paste("Distance from Travemünde (+/- 10km):",i,"km"))+
     theme_bw()+
     scale_x_datetime(date_breaks = "1 year", date_labels = "%Y")+
     theme(legend.position = "bottom")+
     facet_wrap(~dataset, ncol=1)
   
-  ggsave(here::here("/Plots/local_vs_SOCAT", paste("SST_SOCATv6_vs_local_",i,"km_facet.jpg", sep="")),
+  ggsave(here::here("/Plots/local_vs_SOCAT", paste(param,"_SOCATv6_vs_local_",i,"km_facet.jpg", sep="")),
          width = 7, height = 4, dpi = 300)
   
 }
-
+}
 
 df %>% 
   filter(lat > 59, lat < 59.05) %>% 
