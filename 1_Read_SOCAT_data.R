@@ -87,8 +87,14 @@ df <- df %>%
   mutate(date_time = lubridate::ymd_hms(paste(yr, mon, day, hh, mm, ss))) %>% 
   select(date_time, lon, lat, sal, SST, fCO2, subset)
 
+
+# Include also locally stored Finnmaid data -------------------------------
+
 df <- bind_rows(df, FM_local)
 
+
+
+# Plot Timeseries ---------------------------------------------------------
 
 df %>% 
   filter(lat > 59, lat < 59.05) %>% 
