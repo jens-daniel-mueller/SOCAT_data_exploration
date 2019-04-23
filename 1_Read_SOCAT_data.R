@@ -1,149 +1,147 @@
 # Load required libraries -------------------------------------------------
 
 library(tidyverse)
-library(geosphere)
+
+# Read full SOCATv6 data set ----------------------------------------------
+
+df <- read_tsv(here::here("/Data", "SOCATv6.tsv"), skip = 5399)
 
 
-# Finnmaid DOI subset -----------------------------------------------------
+floor_decade    = function(value){ return(value - value %% 10) }
 
-meta <- read_delim("Data/SOCATv6.tsv", 
-                      "\t", escape_double = FALSE, trim_ws = TRUE, 
-                      skip = 4, n_max = 5500)
+df <- df %>%
+  mutate(lat.int = cut(`latitude [dec.deg.N]`, seq(-90,90,10), 
+                       labels = seq(-85,85,10)),
+         lon.int = cut(`longitude [dec.deg.E]`, seq(-180,180,20), 
+                       labels = seq(-170,170,20)),
+         d_Tem = cut(`Tequ [deg.C]`-`SST [deg.C]`, seq(-10,20,0.25),
+                     labels = seq(-9.88,20,0.25)),
+         floor_decade = floor_decade(yr))
 
-meta <- meta %>% 
-  filter(`Platform Name` %in% c("Finnmaid", "VOS Finnpartner"))
+df_int <- df %>% 
+  group_by(floor_decade, lat.int, d_Tem) %>% 
+  summarise(nr=n(),
+            SST_mean = mean(`SST [deg.C]`),
+            fCO2_mean = mean(`fCO2rec [uatm]`)) %>% 
+  ungroup()
 
-Finnmaid_DOI <- meta$`SOCAT DOI`
+df_int <- df_int %>%
+  mutate(lat.int = as.numeric(as.character(lat.int)),
+         d_Tem = as.numeric(as.character(d_Tem)))
 
-f <- function(x, pos) subset(x, SOCAT_DOI  %in% Finnmaid_DOI)
-df_DOI <- read_tsv_chunked(here::here("/Data", "SOCATv6.tsv"), skip = 5399,
-                       DataFrameCallback$new(f), chunk_size = 100000)
-
-rm(f, meta, Finnmaid_DOI)
-
-
-# Finnmaid Flag E DOI subset ----------------------------------------------
-
-meta <- read_delim("Data/SOCATv6_FlagE.tsv", 
-                   "\t", escape_double = FALSE, trim_ws = TRUE, 
-                   skip = 4, n_max = 107)
-
-meta <- meta %>% 
-  filter(`Platform Name` %in% c("Finnmaid", "VOS Finnpartner"))
-
-Finnmaid_DOI <- meta$`SOCAT DOI`
-
-f <- function(x, pos) subset(x, SOCAT_DOI  %in% Finnmaid_DOI)
-df_DOI_E <- read_tsv_chunked(here::here("/Data", "SOCATv6_FlagE.tsv"),
-                             skip = 154,
-                       DataFrameCallback$new(f), chunk_size = 100000)
-
-df_DOI_E <- df_DOI_E %>% 
-  mutate(Expocode = as.character(Expocode))
-
-rm(f, meta, Finnmaid_DOI)
-
-# Read local Finnmaid data file -------------------------------------------
-
-FM_local <- read_csv(here::here("Data", "Finnmaid_all_2019.csv"))
-
-FM_local <- FM_local %>% 
-  filter(date <= lubridate::ymd("2017-12-31")) %>% 
-  select(date_time = date,
-         lon = Lon,
-         lat = Lat,
-         sal = Sal,
-         SST = Tem,
-         fCO2 = pCO2) %>% 
-  mutate(dataset = "Bernds Finnmaid data set, locally stored")
-
-# Merge Central Baltic Sea and DOI data set -------------------------------
-
-df <- bind_rows(df_DOI, df_DOI_E)
-
-df <- df %>% 
-  rename("lon" = "longitude [dec.deg.E]",
-         "lat" = "latitude [dec.deg.N]",
-         "fCO2" = "fCO2rec [uatm]",
-         "SST" = "SST [deg.C]") %>% 
-  mutate(date_time = lubridate::ymd_hms(paste(yr, mon, day, hh, mm, ss)),
-         dataset = "SOCAT incl Flag E") %>% 
-  select(date_time, lon, lat, sal, SST, fCO2, dataset)
-
-
-# Include also locally stored Finnmaid data -------------------------------
-
-df <- bind_rows(df, FM_local)
-rm(df_DOI, df_DOI_E, FM_local)
-
-# Define distance intervals from Travemuende ------------------------------
-
-df <- df %>% 
-  mutate(dist_Trave = distGeo(cbind(lon, lat), c(10.8605315, 53.9414096))/1e3,
-         dist_Trave = as.numeric(as.character(
-           cut(dist_Trave, seq(0,1500,20),labels = seq(10,1490,20)))))
-
-# Plot Timeseries ---------------------------------------------------------
-
-#i <- unique(df$dist_Trave)[1]
-
-for (param in c("SST","sal", "fCO2")) {
-  for (i in na.omit(unique(df$dist_Trave))) {
-
-  df %>% 
-    filter(dist_Trave == i) %>% 
-    ggplot(aes_string("date_time", param, col="dataset"))+
-    geom_point(size = 0.5)+
-    scale_color_brewer(palette = "Set1", name="")+
-    labs(x="", title = "Comparison of Finnmaid data sets",
-         subtitle = paste("Distance from Travemünde (+/- 10km):",i,"km"))+
-    theme_bw()+
-    scale_x_datetime(date_breaks = "1 year", date_labels = "%Y")+
-    theme(legend.position = "bottom")
-  
-  ggsave(here::here("/Plots/local_vs_SOCAT", paste(param,"_SOCATv6_vs_local_",i,"km.jpg", sep="")),
-         width = 15, height = 4, dpi = 300)
- 
-  df %>% 
-    filter(dist_Trave == i) %>% 
-    ggplot(aes_string("date_time", as.name(param)))+
-    geom_point(size = 0.5)+
-    labs(x="", title = "Comparison of Finnmaid data sets",
-         subtitle = paste("Distance from Travemünde (+/- 10km):",i,"km"))+
-    theme_bw()+
-    scale_x_datetime(date_breaks = "1 year", date_labels = "%Y")+
-    theme(legend.position = "bottom")+
-    facet_wrap(~dataset, ncol=1)
-  
-  ggsave(here::here("/Plots/local_vs_SOCAT", paste(param,"_SOCATv6_vs_local_",i,"km_facet.jpg", sep="")),
-         width = 7, height = 4, dpi = 300)
-  
-}
-}
-
-df %>% 
-  filter(lat > 59, lat < 59.05) %>% 
-  ggplot(aes(date_time, fCO2, col=dataset))+
-  geom_point()+
-  scale_color_brewer(palette = "Set1", name="")+
-  labs(x="", y="pCO2 / fCO2", title = "Comparison of Finnmaid data sets",
-      subtitle = "Own data and two subsets from SOCATv6.tsv | Lat range: 59-59.05N")+
+df_int %>% 
+  filter(d_Tem > -5, d_Tem < 5) %>% 
+  ggplot(aes(lat.int, d_Tem, fill=log10(nr)))+
+  geom_raster()+
+  geom_hline(yintercept = 0)+
+  geom_vline(xintercept = 0)+
+  scale_fill_viridis_c(name = "log10(nr observations)")+
   theme_bw()+
+  labs(x="Latitude (10 deg N intervals)", y="Tequi - SST (K)",
+       title = "Difference between insitu and measurement temperature",
+       subtitle = "SOCATv6 data displayed for decades and latitude intervals")+
+  facet_wrap(~floor_decade)+
   theme(legend.position = "bottom")
 
-
-ggsave(here::here("/Plots", "SOCATv6_incl_E.jpg"),
-       width = 15, height = 4)
+ggsave(here::here("Plots/deltaT", "deltaT_SOCAT.jpg"), width = 7, height = 7)
 
 
+# df_int %>% 
+#   ggplot(aes(d_Tem, lat.int, fill=fCO2_mean))+
+#   geom_vline(xintercept = 0)+
+#   geom_raster()+
+#   scale_fill_viridis_c(limits=c(200,500))+
+#   theme_bw()+
+#   facet_wrap(~floor_decade)
 
+df_int %>% 
+  ggplot(aes(d_Tem, fCO2_mean, col=as.factor(floor_decade)))+
+  geom_vline(xintercept = 0)+
+  geom_point()+
+  scale_color_viridis_d(name="Decade", direction = -1)+
+  theme_bw()+
+  facet_wrap(~lat.int)+
+  ylim(200,500)+
+  labs(x="Tequi - SST (K)", y="fCO2 (uatm)",
+       title = "fCO2 relation to temperature difference",
+       subtitle = "SOCATv6 data displayed for decades and latitude (10 deg N intervals)")
 
-# Safe merged data file ---------------------------------------------------
+ggsave(here::here("Plots/deltaT", "fCO2_vs_deltaT_SOCAT.jpg"), width = 8, height = 6)
 
-df %>%
-write_csv(here::here("/Data", "SOCATv6_Finnmaid.csv"))
-
-
-
-
+# 
+# df %>% 
+# write_rds(here::here("/Data", "SOCATv6.rds"), compress = "none")
+# 
+# df <- read_rds(here::here("/Data", "SOCATv6.rds"))
+# 
+# df_2010 <- df %>% 
+#   filter(yr >= 2010)
+# 
+# df_2010 %>%
+# write_rds(here::here("/Data", "SOCATv6_2010.rds"), compress = "none")
+# 
+# df_2010 <- read_rds(here::here("/Data", "SOCATv6_2010.rds"))
+# df <- read_rds(here::here("/Data", "SOCATv6.rds"))
+# rm(df)
+# 
+# 
+# df_2010
+# 
+# 
+# 
+# 
+# df_2010 %>% 
+#   ggplot(aes(`Tequ [deg.C]`-`SST [deg.C]`))+
+#   geom_histogram()
+# 
+# df_2010 %>% 
+#   ggplot(aes(`latitude [dec.deg.N]`,`Tequ [deg.C]`-`SST [deg.C]`))+
+#   geom_point()
+# 
+# 
+# for (param in c("SST","sal", "fCO2")) {
+#   for (i in na.omit(unique(df$dist_Trave))) {
+#     
+#     df %>% 
+#       filter(dist_Trave == i) %>% 
+#       ggplot(aes_string("date_time", param, col="dataset"))+
+#       geom_point(size = 0.5)+
+#       scale_color_brewer(palette = "Set1", name="")+
+#       labs(x="", title = "Comparison of Finnmaid data sets",
+#            subtitle = paste("Distance from Travemünde (+/- 10km):",i,"km"))+
+#       theme_bw()+
+#       scale_x_datetime(date_breaks = "1 year", date_labels = "%Y")+
+#       theme(legend.position = "bottom")
+#     
+#     ggsave(here::here("/Plots/local_vs_SOCAT", paste(param,"_SOCATv6_vs_local_",i,"km.jpg", sep="")),
+#            width = 15, height = 4, dpi = 300)
+#     
+#     df %>% 
+#       filter(dist_Trave == i) %>% 
+#       ggplot(aes_string("date_time", as.name(param)))+
+#       geom_point(size = 0.5)+
+#       labs(x="", title = "Comparison of Finnmaid data sets",
+#            subtitle = paste("Distance from Travemünde (+/- 10km):",i,"km"))+
+#       theme_bw()+
+#       scale_x_datetime(date_breaks = "1 year", date_labels = "%Y")+
+#       theme(legend.position = "bottom")+
+#       facet_wrap(~dataset, ncol=1)
+#     
+#     ggsave(here::here("/Plots/local_vs_SOCAT", paste(param,"_SOCATv6_vs_local_",i,"km_facet.jpg", sep="")),
+#            width = 7, height = 4, dpi = 300)
+#     
+#   }
+# }
+# 
+# 
+# 
+# 
+# 
+# f <- function(x, pos) subset(x, SOCAT_DOI  %in% Finnmaid_DOI)
+# df_DOI <- read_tsv_chunked(here::here("/Data", "SOCATv6.tsv"), skip = 5399,
+#                        DataFrameCallback$new(f), chunk_size = 100000)
+# 
+# 
+# 
+# 
 
